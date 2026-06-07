@@ -42,14 +42,56 @@ SCHEMA_VERSION = 3
 PY = sys.executable or "python"
 
 
-def connect():
+def connect(ensure_schema=True):
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     c = sqlite3.connect(str(DB_PATH), timeout=30)
     c.execute("PRAGMA foreign_keys=ON;")
     c.execute("PRAGMA journal_mode=WAL;")
     c.execute("PRAGMA busy_timeout=30000;")
     c.row_factory = sqlite3.Row
+    if ensure_schema:
+        # Idempotent: every statement is CREATE ... IF NOT EXISTS, so this creates
+        # tables/views on first use and is a cheap no-op afterward. This means any
+        # command works even if `init` was never run explicitly.
+        c.executescript(SCHEMA)
+        _migrate(c)
+        cur = c.execute("SELECT value FROM schema_meta WHERE key='version'").fetchone()
+        if not cur:
+            c.execute("INSERT OR REPLACE INTO schema_meta(key,value) VALUES('version',?)",
+                      (str(SCHEMA_VERSION),))
+        c.commit()
+        _ensure_side_files()
     return c
+
+
+# Columns that may be missing from DBs created by an older wsdb.py.
+# CREATE TABLE IF NOT EXISTS will not add columns to an existing table, so we
+# add them explicitly. Each entry: (table, column, column_def). Safe & idempotent.
+_MIGRATIONS = [
+    ("execution_steps", "fail_count", "INTEGER DEFAULT 0"),
+    ("execution_steps", "last_error", "TEXT"),
+    ("execution_steps", "layer_role", "TEXT DEFAULT 'OTHER'"),
+]
+
+
+def _migrate(c):
+    for table, col, ddl in _MIGRATIONS:
+        try:
+            existing = {r[1] for r in c.execute("PRAGMA table_info(" + table + ")")}
+            if existing and col not in existing:
+                c.execute("ALTER TABLE " + table + " ADD COLUMN " + col + " " + ddl)
+        except sqlite3.OperationalError:
+            pass  # table doesn't exist yet — executescript will have created it
+
+
+def _ensure_side_files():
+    """Create hooks.json and .gitignore if missing. Safe to call repeatedly."""
+    HOOKS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if not HOOKS_PATH.exists():
+        HOOKS_PATH.write_text(json.dumps(DEFAULT_HOOKS, indent=2), encoding="utf-8")
+    gi = ROOT / ".gitignore"
+    if not gi.exists():
+        gi.write_text("state.db\nstate.db-wal\nstate.db-shm\n", encoding="utf-8")
 
 
 def out(obj):
@@ -172,17 +214,12 @@ DEFAULT_HOOKS = {
 
 
 def cmd_init(conn, a):
-    conn.executescript(SCHEMA)
-    conn.execute("INSERT OR REPLACE INTO schema_meta(key,value) VALUES('version',?)", (str(SCHEMA_VERSION),))
-    conn.commit()
-    HOOKS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if not HOOKS_PATH.exists():
-        HOOKS_PATH.write_text(json.dumps(DEFAULT_HOOKS, indent=2), encoding="utf-8")
-    # Keep the runtime DB out of git so it never dirties the tree / blocks preflight.
-    gi = ROOT / ".gitignore"
-    if not gi.exists():
-        gi.write_text("state.db\nstate.db-wal\nstate.db-shm\n", encoding="utf-8")
-    out({"ok": True, "schema_version": SCHEMA_VERSION, "db": str(DB_PATH), "hooks": str(HOOKS_PATH)})
+    # connect() already ensured schema + hooks.json + .gitignore. This command now
+    # just reports state (kept for explicit setup and as a friendly confirmation).
+    ver = conn.execute("SELECT value FROM schema_meta WHERE key='version'").fetchone()
+    out({"ok": True, "schema_version": ver["value"] if ver else SCHEMA_VERSION,
+         "db": str(DB_PATH), "hooks": str(HOOKS_PATH),
+         "note": "schema auto-creates on any command; running init is optional"})
 
 
 def cmd_next(conn, a):

@@ -5,10 +5,11 @@ All skills read and write project state through `python .windsurf/wsdb.py`.
 contain quotes, apostrophes, and newlines that break shell/SQL escaping. The
 helper uses parameterized queries and enforces foreign keys on every connection.
 
-## Setup (once per project)
-```bash
-python .windsurf/wsdb.py init
-```
+## Setup (automatic)
+The schema, `hooks/hooks.json`, and `.gitignore` are created automatically on the
+first wsdb command you run — no manual setup needed. Running `init` explicitly is
+optional and just reports state. Existing DBs from older versions are auto-migrated
+(missing columns added) on connect.
 
 ## Reads (print JSON to stdout)
 ```bash
