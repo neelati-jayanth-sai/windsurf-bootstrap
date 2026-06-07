@@ -24,8 +24,8 @@ migration-test-strategist, windsurf-prompt-maximizer) work from verified facts.
 ## DB Read (Always First)
 
 ```bash
-python3 .windsurf/wsdb.py research-get   # existing research (avoid duplicate)
-python3 .windsurf/wsdb.py progress       # active change context
+python .windsurf/wsdb.py research-get   # existing research (avoid duplicate)
+python .windsurf/wsdb.py progress       # active change context
 ```
 
 If recent research exists for the same library (within 7 days): show it and ask
@@ -164,17 +164,17 @@ Write code only after Research Summary is presented. Code must:
 
 Cascade runs these commands after research is complete:
 
-```bash
-cat > /tmp/research.json << 'JSON'
+Write this JSON to `payload.json` (Cascade's file tool), then run the matching `--file` command:
+```json
 {"library":"[name]","version_found":"[registry version]","version_targeted":"[target]",
  "source_urls":["url1","url2"],
  "key_findings":["finding1","finding2"],
  "deprecated_patterns":[{"old":"pattern","new":"replacement"}],
  "verified_deps":["lib==version","dep==version"],
  "raw_summary":"[full summary]"}
-JSON
-python3 .windsurf/wsdb.py research-add < /tmp/research.json
-python3 .windsurf/wsdb.py research-get
+```
+python .windsurf/wsdb.py research-add --file payload.json
+python .windsurf/wsdb.py research-get
 ```
 
 ---
@@ -185,11 +185,12 @@ python3 .windsurf/wsdb.py research-get
 Flag explicitly: "Pattern `X` deprecated in v[N]. Current: `Y`."
 Ask: "Use current approach or maintain v[N] compatibility?"
 Record decision to DB:
-```bash
-cat > /tmp/dec.json << 'JSON'
+Write this JSON to a file (use Cascade's file tool), then call wsdb with --file:
+```json
 {"change_id":null,"decision_type":"DEPRECATION","description":"[pattern choice]","rationale":"[reason]"}
-JSON
-python3 .windsurf/wsdb.py decision-add < /tmp/dec.json
+```
+```
+python .windsurf/wsdb.py decision-add --file payload.json
 ```
 
 **Official docs ambiguous or missing:**

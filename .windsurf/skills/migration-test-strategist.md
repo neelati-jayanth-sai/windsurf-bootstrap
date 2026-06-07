@@ -22,9 +22,9 @@ every single step — broken tests are not an acceptable intermediate state.
 ## DB Read (Always First)
 
 ```bash
-python3 .windsurf/wsdb.py board        # current plan (IMPL steps so far)
-python3 .windsurf/wsdb.py map-get      # test layer (match layer_role='TEST')
-python3 .windsurf/wsdb.py research-get # library-specific test patterns
+python .windsurf/wsdb.py board        # current plan (IMPL steps so far)
+python .windsurf/wsdb.py map-get      # test layer (match layer_role='TEST')
+python .windsurf/wsdb.py research-get # library-specific test patterns
 ```
 
 If `board` shows no IMPL steps: tell user to run blast-radius-planner first.
@@ -192,31 +192,28 @@ as a decimal (e.g. IMPL step 2 → TEST step 2.5, runs after IMPL 2 gate passes)
 
 Add one T0 step before all IMPL steps (interface extraction or test infrastructure setup).
 
-```bash
-# TEST steps interleave with IMPL steps. Add them via step-add with explicit seq
-# values that slot between existing IMPL seqs. Because seq is an integer with a
-# UNIQUE constraint, first RENUMBER: plan IMPL steps as seq 10,20,30... leaving
-# gaps, then insert TEST steps at 15,25,35. Simplest: rebuild the whole step list
-# in one step-add call with the final interleaved order.
+TEST steps interleave with IMPL steps. Because `seq` is an integer with a UNIQUE
+constraint, plan IMPL steps with gaps (seq 10, 20, 30) so TEST steps slot between
+(15, 25, 35). Simplest: write the whole interleaved list in one `teststeps.json`
+with explicit seq values, then one `step-add` call.
 
-cat > /tmp/teststeps.json << 'JSON'
+Write `teststeps.json` with Cascade's file tool:
+```json
 {"steps":[
-  {"change_id":N,"step_label":"T0","step_type":"TEST","layer_name":"Test Infrastructure Setup",
+  {"change_id":N,"seq":5,"step_label":"T0","step_type":"TEST","layer_role":"TEST","layer_name":"Test Infrastructure Setup",
    "files":["tests/conftest.py"],"acceptance_criteria":["Baseline recorded","Stand-in configured","Old tests pass"],
-   "cascade_prompt":"CONTEXT: ...
-GOAL: set up test stand-in / interface / parallel files"},
-  {"change_id":N,"step_label":"T1","step_type":"TEST","layer_name":"[Layer] Tests",
+   "cascade_prompt":"CONTEXT: ...\nGOAL: set up test stand-in / interface / parallel files"},
+  {"change_id":N,"seq":15,"step_label":"T1","step_type":"TEST","layer_role":"TEST","layer_name":"[Layer] Tests",
    "files":["tests/[layer]/test_[file].py"],"acceptance_criteria":["N tests pass","No old-lib imports"],
-   "cascade_prompt":"CONTEXT: ...
-GOAL: migrate tests for this layer"},
-  {"change_id":N,"step_label":"T-final","step_type":"TEST","layer_name":"Test Cleanup",
+   "cascade_prompt":"CONTEXT: ...\nGOAL: migrate tests for this layer"},
+  {"change_id":N,"seq":999,"step_label":"T-final","step_type":"TEST","layer_role":"TEST","layer_name":"Test Cleanup",
    "files":["all test files"],"acceptance_criteria":["Zero old-lib imports","Full suite green","Coverage >= baseline"],
-   "cascade_prompt":"CONTEXT: ...
-GOAL: remove old factories, parallel files, old mocks"}
+   "cascade_prompt":"CONTEXT: ...\nGOAL: remove old factories, parallel files, old mocks"}
 ]}
-JSON
-python3 .windsurf/wsdb.py step-add < /tmp/teststeps.json
-python3 .windsurf/wsdb.py board
+```
+```
+python .windsurf/wsdb.py step-add --file teststeps.json
+python .windsurf/wsdb.py board
 ```
 
 > Ordering note: if you need a TEST step to run immediately after a specific IMPL

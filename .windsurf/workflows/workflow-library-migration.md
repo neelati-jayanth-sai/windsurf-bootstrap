@@ -19,12 +19,12 @@ migration-test-strategist → windsurf-prompt-maximizer (per step) → verificat
 
 ```bash
 # Check DB exists and is initialized
-python3 .windsurf/wsdb.py init        # idempotent — safe to run every time
-python3 .windsurf/wsdb.py map-get     # [] means codebase not mapped yet
+python .windsurf/wsdb.py init        # idempotent — safe to run every time
+python .windsurf/wsdb.py map-get     # [] means codebase not mapped yet
 # → If 0: run codebase-orienteer FIRST. Do not proceed.
 
 # Check for abandoned active changes
-python3 .windsurf/wsdb.py progress
+python .windsurf/wsdb.py progress
 # → If exists: confirm with user whether to continue or abandon before starting new migration.
 
 # Confirm clean git state
@@ -47,7 +47,7 @@ Target libraries to research:
 Gate: research_findings rows written for all involved libraries.
 
 ```bash
-python3 .windsurf/wsdb.py research-get
+python .windsurf/wsdb.py research-get
 # → Must show rows for FROM and TO library before proceeding
 ```
 
@@ -66,7 +66,7 @@ Gate: change_registry row written, blast_radius rows written, execution_steps (I
 written, all confirmed by user.
 
 ```bash
-python3 .windsurf/wsdb.py board
+python .windsurf/wsdb.py board
 # → Must show IMPL steps in pending status before proceeding
 ```
 
@@ -85,16 +85,17 @@ Gate: TEST steps interleaved in execution_steps. T0 step inserted before IMPL st
 Final cleanup step inserted at end.
 
 ```bash
-python3 .windsurf/wsdb.py board
+python .windsurf/wsdb.py board
 # → Must show alternating IMPL / TEST steps before proceeding
 ```
 
 Record test isolation strategy decision:
-```bash
-cat > /tmp/dec.json << 'JSON'
+Write this JSON to a file (use Cascade's file tool), then call wsdb with --file:
+```json
 {"change_id":N,"decision_type":"STRATEGY","description":"[what]","rationale":"[why]"}
-JSON
-python3 .windsurf/wsdb.py decision-add < /tmp/dec.json
+```
+```
+python .windsurf/wsdb.py decision-add --file payload.json
 ```
 
 ---
@@ -110,10 +111,9 @@ echo "Record the pass count — this is your baseline."
 echo "Command: [test runner command from codebase_map]"
 
 # Store baseline
-cat > /tmp/dec.json << 'JSON'
-{"change_id":N,"decision_type":"ARCHITECTURE","description":"Test baseline: [N] tests passing","rationale":"Must not drop below this at any gate"}
-JSON
-python3 .windsurf/wsdb.py decision-add < /tmp/dec.json
+# write dec.json with Cascade file tool:
+# {"change_id":N,"decision_type":"ARCHITECTURE","description":"Test baseline: [N] tests passing","rationale":"Must not drop below this at any gate"}
+python .windsurf/wsdb.py decision-add --file dec.json
 
 # Final git commit before starting
 echo "git add -A && git commit -m 'baseline before migration: [from] → [to]'"
@@ -121,38 +121,35 @@ echo "git add -A && git commit -m 'baseline before migration: [from] → [to]'"
 
 ---
 
-## Step 5: Execute Steps (Repeat Per Step)
 
-**Activate:** `windsurf-prompt-maximizer` for each step
+## Step 5 (hook-enforced): Execute Steps With Auto-Test + Escalation
 
-```bash
-# Get next step
-python3 .windsurf/wsdb.py next
+Each step runs through hooks so testing and research are enforced, not optional:
+
+```
+# once per Cascade session
+python .windsurf/wsdb.py run-hook on_session_start
+
+# per step:
+python .windsurf/wsdb.py next                                   # get step_id
+python .windsurf/wsdb.py run-hook before_implement --step <id> --library <lib>
+python .windsurf/wsdb.py step-claim <id>
+#   ... Cascade implements the step ...
+python .windsurf/wsdb.py run-hook on_step_complete --step <id>  # runs layer tests
 ```
 
-For each step:
-0. `python3 .windsurf/wsdb.py next` then `python3 .windsurf/wsdb.py step-claim <step_id>`
-1. Paste the `cascade_prompt` from DB into a fresh Cascade conversation if:
-   - session health = RED, or
-   - this is a new IMPL→TEST boundary
-   Otherwise continue in current session.
-2. Run implementation/test changes
-3. Run gate command (test suite / type check)
-4. Confirm gate passed
-5. `git commit -m "step [N]: [layer_name]"`
-6. Update DB:
-   ```bash
-   python3 .windsurf/wsdb.py step-confirm <step_id>
-   ```
-7. Repeat for next step
+Branch on the on_step_complete result:
+- **blocked:false** → tests passed → `run-hook on_gate_pass --step <id>` (auto-commit) → `step-confirm <id>` → next
+- **escalate:true** → tests failed:
+  ```
+  python .windsurf/wsdb.py step-fail <id> --error "<paste test output>"
+  python .windsurf/wsdb.py check-escalate <id>
+  ```
+  - `escalate:false` (under 3 fails) → diagnose, minimum fix, re-claim, retry
+  - `escalate:true` (hit 3 fails) → run research-first-coder scoped to `last_error`,
+    write findings, regenerate the step's prompt, retry once. Still failing → it stays
+    `escalated` and surfaces first on `next` for you to handle.
 
-**Session hygiene between steps:**
-```bash
-python3 .windsurf/wsdb.py progress
-# Shows done/remaining/failed counts at any point
-```
-
----
 
 ## Step 6: Consistency Verification
 
@@ -179,10 +176,10 @@ grep -r "[OLD_LIBRARY]" . \
 
 ```bash
 # Mark change complete
-python3 .windsurf/wsdb.py change-complete <change_id>
+python .windsurf/wsdb.py change-complete <change_id>
 
 # Final summary
-python3 .windsurf/wsdb.py progress
+python .windsurf/wsdb.py progress
 
 # Tag the completion
 echo "git tag migration/[from]-to-[to]-complete"
@@ -195,10 +192,10 @@ echo "git push"
 
 ```bash
 # Full state in one query
-python3 .windsurf/wsdb.py progress
-python3 .windsurf/wsdb.py next
-python3 .windsurf/wsdb.py board
-python3 .windsurf/wsdb.py health
+python .windsurf/wsdb.py progress
+python .windsurf/wsdb.py next
+python .windsurf/wsdb.py board
+python .windsurf/wsdb.py health
 
 # Paste next_step.cascade_prompt into Cascade
 # Continue from where you left off — no context reconstruction needed

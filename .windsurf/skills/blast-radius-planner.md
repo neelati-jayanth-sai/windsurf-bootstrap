@@ -22,15 +22,15 @@ plan to DB that windsurf-prompt-maximizer pulls from step by step.
 
 ## DB Interface
 
-All DB access goes through `python3 .windsurf/wsdb.py` (see `wsdb-interface.md`).
+All DB access goes through `python .windsurf/wsdb.py` (see `wsdb-interface.md`).
 Never use raw `sqlite3 "..."` — it breaks on the quotes/newlines in Cascade prompts.
 
 ## DB Read (Always First)
 
 ```bash
-python3 .windsurf/wsdb.py map-get        # codebase layers (empty array = not mapped)
-python3 .windsurf/wsdb.py research-get   # verified versions / deprecated patterns
-python3 .windsurf/wsdb.py progress       # any already-active change
+python .windsurf/wsdb.py map-get        # codebase layers (empty array = not mapped)
+python .windsurf/wsdb.py research-get   # verified versions / deprecated patterns
+python .windsurf/wsdb.py progress       # any already-active change
 ```
 
 If `map-get` returns `[]`: STOP. Tell user to run codebase-orienteer first.
@@ -133,7 +133,7 @@ Build step list from confirmed audit. Each step:
 ⚠️  BEFORE STEP 1: git commit your clean baseline.
 ⚠️  Session hygiene: Watch context indicator. Above 60% → start fresh Cascade session.
 ⚠️  Message limit: After 20 messages in a session, start a new one.
-    Resume with: python3 .windsurf/wsdb.py next
+    Resume with: python .windsurf/wsdb.py next
 
 Step 1 — [Layer Name] ([IMPL/TEST])
 Files:    [list]
@@ -170,36 +170,43 @@ OUT OF SCOPE: [explicit list of adjacent things to leave untouched]
 
 ## DB Write
 
-Use temp files for payloads (never inline) so quotes/newlines in prompts survive:
+Cascade writes each JSON payload to a file using its **file-creation tool** (not a
+shell heredoc — that fails on Windows), then calls wsdb with `--file`.
 
-```bash
-# 1. Register the change → returns {"change_id": N}
-cat > /tmp/change.json << 'JSON'
+**1. Register the change.** Write `change.json`:
+```json
 {"change_type":"[type]","impact_scope":"[scope]","change_description":"[desc]","confirmed_by_user":1}
-JSON
-python3 .windsurf/wsdb.py change-add < /tmp/change.json
-# note the change_id from output, use below
+```
+```
+python .windsurf/wsdb.py change-add --file change.json
+```
+Note the `change_id` from the output; use it below as `N`.
 
-# 2. Write all blast-radius files at once
-cat > /tmp/blast.json << 'JSON'
+**2. Write all blast-radius files.** Write `blast.json`:
+```json
 {"rows":[
   {"change_id":N,"layer_number":1,"layer_name":"Migrations","file_path":"...","what_changes":"...","risk_level":"LOW","confirmed":1}
 ]}
-JSON
-python3 .windsurf/wsdb.py blast-add < /tmp/blast.json
+```
+```
+python .windsurf/wsdb.py blast-add --file blast.json
+```
 
-# 3. Write all execution steps (seq auto-assigned in array order)
-cat > /tmp/steps.json << 'JSON'
+**3. Write all execution steps** (seq auto-assigned in array order; pass explicit
+`seq` with gaps like 10,20,30 if test steps will slot between). Write `steps.json`:
+```json
 {"steps":[
-  {"change_id":N,"step_label":"1","step_type":"IMPL","layer_name":"Migrations",
+  {"change_id":N,"seq":10,"step_label":"1","step_type":"IMPL","layer_name":"Migrations","layer_role":"DB",
    "files":["..."],"acceptance_criteria":["..."],"cascade_prompt":"CONTEXT: ...\nGOAL: ..."}
 ]}
-JSON
-python3 .windsurf/wsdb.py step-add < /tmp/steps.json
-
-# 4. Confirm the plan
-python3 .windsurf/wsdb.py board
 ```
+```
+python .windsurf/wsdb.py step-add --file steps.json
+python .windsurf/wsdb.py board
+```
+
+Always set each step's `layer_role` (DB/MODEL/REPO/SERVICE/API/TYPE/FRONTEND/TEST/
+CONFIG/AUTH) — the hook runner uses it to pick the right test command.
 
 ---
 
@@ -207,10 +214,10 @@ python3 .windsurf/wsdb.py board
 
 For each step, Cascade:
 
-1. Get next step: `python3 .windsurf/wsdb.py next`
+1. Get next step: `python .windsurf/wsdb.py next`
 2. Claim it atomically (prevents two sessions doing the same step):
    ```bash
-   python3 .windsurf/wsdb.py step-claim <step_id>
+   python .windsurf/wsdb.py step-claim <step_id>
    ```
    If claim returns `{"ok": false}` → another session has it; stop.
 3. Announce: "Executing Step <label> — <layer_name>"
@@ -218,13 +225,13 @@ For each step, Cascade:
 5. Present acceptance checklist, wait for user
 6. On gate pass:
    ```bash
-   python3 .windsurf/wsdb.py step-confirm <step_id>
+   python .windsurf/wsdb.py step-confirm <step_id>
    ```
 7. Do NOT proceed until confirmed and user replies
 
 **If step fails:**
 ```bash
-python3 .windsurf/wsdb.py step-fail <step_id> "what went wrong"
+python .windsurf/wsdb.py step-fail <step_id> "what went wrong"
 ```
 A failed step is surfaced FIRST by `next` — you cannot skip past it. Resolve, then
 re-claim and retry. Do not proceed to later steps.
@@ -239,7 +246,7 @@ Stop. Ask user. If yes, add to blast_radius first via `blast-add`, then implemen
 After all IMPL and TEST steps confirmed:
 
 ```bash
-python3 .windsurf/wsdb.py board   # confirm all steps confirmed
+python .windsurf/wsdb.py board   # confirm all steps confirmed
 ```
 
 Search for residual references to old entity:
@@ -251,7 +258,7 @@ grep -r "[OLD_ENTITY_NAME]" . \
 
 Produce verification block. On clean pass:
 ```bash
-python3 .windsurf/wsdb.py change-complete <change_id>
+python .windsurf/wsdb.py change-complete <change_id>
 ```
 
 ---
@@ -261,7 +268,7 @@ python3 .windsurf/wsdb.py change-complete <change_id>
 Triggered by: "still broken", "fixing one breaks another", "circular errors".
 
 ```bash
-python3 .windsurf/wsdb.py board   # shows failed steps and their failure_notes
+python .windsurf/wsdb.py board   # shows failed steps and their failure_notes
 ```
 
 Produce diagnosis:

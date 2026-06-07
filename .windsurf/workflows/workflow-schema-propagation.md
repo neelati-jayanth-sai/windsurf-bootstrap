@@ -20,7 +20,7 @@ Skips research (schema changes are internal). Uses blast-radius test layers dire
 
 ```bash
 # Verify DB initialized and codebase mapped
-python3 .windsurf/wsdb.py map-get
+python .windsurf/wsdb.py map-get
 # → If 0: run codebase-orienteer first
 
 # Clean git state
@@ -80,11 +80,12 @@ Is this a type change?
 ```
 
 Record decisions:
-```bash
-cat > /tmp/dec.json << 'JSON'
+Write this JSON to a file (use Cascade's file tool), then call wsdb with --file:
+```json
 {"change_id":N,"decision_type":"STRATEGY","description":"[what]","rationale":"[why]"}
-JSON
-python3 .windsurf/wsdb.py decision-add < /tmp/dec.json
+```
+```
+python .windsurf/wsdb.py decision-add --file payload.json
 ```
 
 ---
@@ -134,5 +135,22 @@ grep -r "SELECT \*" . --include="*.py" --include="*.ts" -l
 ```
 
 ```bash
-python3 .windsurf/wsdb.py change-complete <change_id>
+python .windsurf/wsdb.py change-complete <change_id>
 ```
+
+
+## Hook Enforcement (applies to every step)
+
+This workflow uses hooks so testing/commit/escalation are enforced. Per step:
+```
+python .windsurf/wsdb.py run-hook on_session_start          # preflight (once per session)
+python .windsurf/wsdb.py run-hook before_implement --step <id>
+python .windsurf/wsdb.py step-claim <id>
+# ... implement ...
+python .windsurf/wsdb.py run-hook on_step_complete --step <id>   # runs layer tests
+#   pass  → run-hook on_gate_pass --step <id> → step-confirm <id>
+#   fail  → step-fail <id> --error "<output>" → check-escalate <id>
+#           (3 fails → research-first-coder on the error, then retry once)
+```
+See `.windsurf/hooks-interface.md` for the full hook contract and how to set test
+commands per layer in `.windsurf/hooks/hooks.json`.

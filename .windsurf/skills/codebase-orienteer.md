@@ -21,8 +21,8 @@ every other skill invents file paths. With it, every other skill reads reality.
 ## DB Read (Always First)
 
 ```bash
-python3 .windsurf/wsdb.py map-get    # [] means not yet mapped
-python3 .windsurf/wsdb.py progress   # any active change
+python .windsurf/wsdb.py map-get    # [] means not yet mapped
+python .windsurf/wsdb.py progress   # any active change
 ```
 
 If `map-get` returns rows: show last mapped date and ask "Re-map from scratch, or update specific
@@ -206,8 +206,8 @@ LOW — [e.g. email utilities: only used in 2 places, self-contained]
 
 Write the map to the database. Cascade runs these commands:
 
-```bash
-cat > /tmp/map.json << 'JSON'
+Write this JSON to `payload.json` (Cascade's file tool), then run the matching `--file` command:
+```json
 {"replace": true, "rows": [
   {"layer_name":"Migrations","layer_role":"DB","layer_order":1,"path_pattern":"db/migrations/","tech_stack":"Alembic"},
   {"layer_name":"Models","layer_role":"MODEL","layer_order":2,"path_pattern":"src/models/","tech_stack":"SQLAlchemy"},
@@ -218,9 +218,9 @@ cat > /tmp/map.json << 'JSON'
   {"layer_name":"Frontend","layer_role":"FRONTEND","layer_order":7,"path_pattern":"frontend/src/","tech_stack":"React"},
   {"layer_name":"Tests","layer_role":"TEST","layer_order":8,"path_pattern":"tests/","tech_stack":"pytest"}
 ]}
-JSON
-python3 .windsurf/wsdb.py map-add < /tmp/map.json
-python3 .windsurf/wsdb.py map-get
+```
+python .windsurf/wsdb.py map-add --file payload.json
+python .windsurf/wsdb.py map-get
 ```
 
 > `layer_role` MUST be one of: DB / MODEL / REPO / SERVICE / API / TYPE / FRONTEND

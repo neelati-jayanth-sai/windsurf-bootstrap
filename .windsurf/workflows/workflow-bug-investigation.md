@@ -18,7 +18,7 @@ unless the fix turns out to affect multiple layers.
 ## Step 0: DB Check
 
 ```bash
-python3 .windsurf/wsdb.py map-get
+python .windsurf/wsdb.py map-get
 # → Layer map helpful but not required for bug investigation
 # → If empty: proceed without it, just note file paths manually
 
@@ -120,8 +120,24 @@ git add [changed files]
 git commit -m "fix: [description of bug] — [root cause in one line]"
 
 # Record in DB
-cat > /tmp/dec.json << 'JSON'
-{"change_id":N,"decision_type":"STRATEGY","description":"[what]","rationale":"[why]"}
-JSON
-python3 .windsurf/wsdb.py decision-add < /tmp/dec.json
+# write dec.json with Cascade file tool:
+# {"change_id":N,"decision_type":"STRATEGY","description":"[what]","rationale":"[why]"}
+python .windsurf/wsdb.py decision-add --file dec.json
 ```
+
+
+## Hook Enforcement (applies to every step)
+
+This workflow uses hooks so testing/commit/escalation are enforced. Per step:
+```
+python .windsurf/wsdb.py run-hook on_session_start          # preflight (once per session)
+python .windsurf/wsdb.py run-hook before_implement --step <id>
+python .windsurf/wsdb.py step-claim <id>
+# ... implement ...
+python .windsurf/wsdb.py run-hook on_step_complete --step <id>   # runs layer tests
+#   pass  → run-hook on_gate_pass --step <id> → step-confirm <id>
+#   fail  → step-fail <id> --error "<output>" → check-escalate <id>
+#           (3 fails → research-first-coder on the error, then retry once)
+```
+See `.windsurf/hooks-interface.md` for the full hook contract and how to set test
+commands per layer in `.windsurf/hooks/hooks.json`.

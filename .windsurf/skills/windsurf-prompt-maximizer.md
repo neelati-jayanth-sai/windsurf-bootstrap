@@ -22,9 +22,9 @@ state from conversation — always reads DB first.
 ## DB Read (Always First)
 
 ```bash
-python3 .windsurf/wsdb.py next       # next step (its cascade_prompt is ready to paste)
-python3 .windsurf/wsdb.py progress   # overall progress
-python3 .windsurf/wsdb.py health     # session step-count health
+python .windsurf/wsdb.py next       # next step (its cascade_prompt is ready to paste)
+python .windsurf/wsdb.py progress   # overall progress
+python .windsurf/wsdb.py health     # session step-count health
 ```
 
 **If `wsdb next` returns a step:** Format that step as Cascade prompt. Do not ask user
@@ -42,7 +42,7 @@ consistency verification.
 Pull the step from DB and format it:
 
 ```bash
-python3 .windsurf/wsdb.py step-claim <step_id>   # atomic; fails if another session has it
+python .windsurf/wsdb.py step-claim <step_id>   # atomic; fails if another session has it
 ```
 
 Format the `cascade_prompt` field from DB. Prepend session hygiene reminders:
@@ -55,7 +55,7 @@ Format the `cascade_prompt` field from DB. Prepend session hygiene reminders:
 // If context indicator > 60%: start fresh Cascade session first
 // If message count > 18: start fresh Cascade session first
 // Commit before starting this step
-// Resume command: python3 .windsurf/wsdb.py next
+// Resume command: python .windsurf/wsdb.py next
 // ────────────────────────────────────────────────────────────
 
 [cascade_prompt from DB]
@@ -63,9 +63,9 @@ Format the `cascade_prompt` field from DB. Prepend session hygiene reminders:
 
 After user confirms step complete:
 ```bash
-python3 .windsurf/wsdb.py step-confirm <step_id>
-python3 .windsurf/wsdb.py next        # show what's next
-python3 .windsurf/wsdb.py progress
+python .windsurf/wsdb.py step-confirm <step_id>
+python .windsurf/wsdb.py next        # show what's next
+python .windsurf/wsdb.py progress
 ```
 
 ---
@@ -171,11 +171,11 @@ After every step confirmation, update session log:
 ```bash
 # Session health updates automatically on each step-claim (counts steps this
 # session). Check it any time:
-python3 .windsurf/wsdb.py health
+python .windsurf/wsdb.py health
 ```
 
 When health turns AMBER (≥7 steps this session): suggest a fresh Cascade session soon.
 When RED (≥12 steps): tell user to start a new Cascade session before the next step.
 Note: health counts steps done this session, not chat messages — pair it with your
 own watch on Windsurf's context indicator (fresh session above ~60%).
-Resume command after a fresh session: `python3 .windsurf/wsdb.py next`
+Resume command after a fresh session: `python .windsurf/wsdb.py next`

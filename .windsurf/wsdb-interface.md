@@ -1,33 +1,32 @@
 # wsdb — State DB Interface (shared reference)
 
-All skills read and write project state through `python3 .windsurf/wsdb.py`.
+All skills read and write project state through `python .windsurf/wsdb.py`.
 **Never** use raw `sqlite3 db "..."` shell commands — multi-line Cascade prompts
 contain quotes, apostrophes, and newlines that break shell/SQL escaping. The
 helper uses parameterized queries and enforces foreign keys on every connection.
 
 ## Setup (once per project)
 ```bash
-python3 .windsurf/wsdb.py init
+python .windsurf/wsdb.py init
 ```
 
 ## Reads (print JSON to stdout)
 ```bash
-python3 .windsurf/wsdb.py next        # next actionable step (failed steps first, then pending)
-python3 .windsurf/wsdb.py progress    # done/remaining/failed counts for active change
-python3 .windsurf/wsdb.py board       # full step list with statuses
-python3 .windsurf/wsdb.py health      # session health (step-count based — see note)
-python3 .windsurf/wsdb.py map-get     # codebase layer map
-python3 .windsurf/wsdb.py research-get # recent research findings
+python .windsurf/wsdb.py next        # next actionable step (failed steps first, then pending)
+python .windsurf/wsdb.py progress    # done/remaining/failed counts for active change
+python .windsurf/wsdb.py board       # full step list with statuses
+python .windsurf/wsdb.py health      # session health (step-count based — see note)
+python .windsurf/wsdb.py map-get     # codebase layer map
+python .windsurf/wsdb.py research-get # recent research findings
 ```
 
-## Writes (JSON payload on stdin — NO shell escaping needed)
-Always write the payload to a temp file and pipe it. This is the safe pattern:
-```bash
-cat > /tmp/payload.json << 'JSON'
-{ ...json... }
-JSON
-python3 .windsurf/wsdb.py <command> < /tmp/payload.json
+## Writes (JSON payload via --file PATH — Windows-safe, no shell escaping)
+Cascade writes the JSON using its own file-creation tool (NOT a shell heredoc),
+then passes the path. This works identically on Windows cmd, PowerShell, and bash:
 ```
+python .windsurf/wsdb.py <command> --file payload.json
+```
+Use `python` or `python3` — whichever your machine has.
 
 ### change-add
 ```json
@@ -69,9 +68,9 @@ Returns `{"change_id": N}`. Also auto-creates a session_log row.
 
 ### Step lifecycle (atomic)
 ```bash
-python3 .windsurf/wsdb.py step-claim   <step_id>   # only succeeds if pending/failed → prevents two sessions grabbing same step
-python3 .windsurf/wsdb.py step-confirm <step_id>   # gate passed
-python3 .windsurf/wsdb.py step-fail    <step_id> "failure notes"
+python .windsurf/wsdb.py step-claim   <step_id>   # only succeeds if pending/failed → prevents two sessions grabbing same step
+python .windsurf/wsdb.py step-confirm <step_id>   # gate passed
+python .windsurf/wsdb.py step-fail    <step_id> "failure notes"
 ```
 
 ### decision-add
@@ -81,13 +80,13 @@ python3 .windsurf/wsdb.py step-fail    <step_id> "failure notes"
 
 ### Close-out
 ```bash
-python3 .windsurf/wsdb.py change-complete <change_id>
-python3 .windsurf/wsdb.py change-abandon  <change_id>   # cascades delete of its steps/blast/decisions
+python .windsurf/wsdb.py change-complete <change_id>
+python .windsurf/wsdb.py change-abandon  <change_id>   # cascades delete of its steps/blast/decisions
 ```
 
 ## Resume after any break
 ```bash
-python3 .windsurf/wsdb.py progress && python3 .windsurf/wsdb.py next
+python .windsurf/wsdb.py progress && python .windsurf/wsdb.py next
 ```
 Paste the `cascade_prompt` from `next` into Cascade. No context reconstruction.
 
